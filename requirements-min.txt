@@ -1,0 +1,13 @@
+# 方案A「最小跑通」依赖（规则版 NER + DeepSeek API）
+# 相比原 requirements.txt，去掉了 torch / transformers / peft / datasets / ollama / zhipuai 等重依赖：
+#   - NER 改为规则版（rule_ner.py，仅需 ahocorasick + scikit-learn）
+#   - LLM 改为调 DeepSeek API（llm_client.py，走 openai 兼容接口）
+# 适合 4GB 显存 / 无 GPU 环境快速跑通。
+streamlit>=1.40
+py2neo==2021.2.4
+pyahocorasick==2.1.0
+scikit-learn>=1.9
+numpy>=2.0
+pandas>=2.3.3
+tqdm==4.66.2
+openai>=1.30

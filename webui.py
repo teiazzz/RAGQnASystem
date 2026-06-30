@@ -1,16 +1,21 @@
 import os
+import asyncio
 import streamlit as st
-import ner_model as ner
-import pickle
-import ollama
-from transformers import BertTokenizer
-import torch
+import rule_ner          # 规则版 NER，替换原 BERT+RNN（无需 torch/transformers）
+import llm_client        # DeepSeek API，替换原本地 ollama
 import py2neo
 import random
 import re
 import logging
+from datetime import datetime, timezone
 from typing import Dict, List, Tuple
 
+from sqlalchemy import func, select
+
+from app.core.security import hash_password
+from app.db.models import Conversation, DocumentChunk, Message, User
+from app.db.session import async_session_maker, engine, init_db
+from app.services.corpus_indexer import index_medical_corpus, index_text_document
 from config import settings
 from logging_setup import setup_logging
 from kg_client import (
@@ -24,33 +29,121 @@ setup_logging()
 logger = logging.getLogger(__name__)
 
 
+def run_db_task(coro):
+    """在 Streamlit 同步脚本里执行异步 DB 任务，并释放 asyncpg 连接池。"""
+    async def runner():
+        try:
+            return await coro
+        finally:
+            await engine.dispose()
+
+    return asyncio.run(runner())
+
+
+async def ensure_streamlit_user(session, username: str, is_admin: bool) -> User:
+    """把 Streamlit JSON 登录用户映射到 PostgreSQL users 表。"""
+    user = await session.scalar(select(User).where(User.username == username))
+    if user is not None:
+        if user.is_admin != is_admin:
+            user.is_admin = is_admin
+        return user
+    user = User(
+        username=username,
+        password_hash=hash_password("streamlit-json-auth-placeholder"),
+        is_admin=is_admin,
+    )
+    session.add(user)
+    await session.flush()
+    return user
+
+
+async def save_user_message(
+    username: str,
+    is_admin: bool,
+    conversation_id: int | None,
+    content: str,
+) -> int:
+    """保存用户消息；没有会话时自动创建会话。"""
+    await init_db()
+    async with async_session_maker() as session:
+        user = await ensure_streamlit_user(session, username, is_admin)
+        if conversation_id is None:
+            conv = Conversation(user_id=user.id, title=(content[:20] or "新对话"))
+            session.add(conv)
+            await session.flush()
+            conversation_id = conv.id
+        else:
+            conv = await session.get(Conversation, conversation_id)
+            if conv is None or conv.user_id != user.id:
+                conv = Conversation(user_id=user.id, title=(content[:20] or "新对话"))
+                session.add(conv)
+                await session.flush()
+                conversation_id = conv.id
+        session.add(Message(conversation_id=conversation_id, role="user", content=content))
+        await session.commit()
+        return conversation_id
+
+
+async def save_assistant_message(
+    conversation_id: int,
+    content: str,
+    entities: dict,
+    intents: list[str],
+    knowledge: str,
+) -> None:
+    """保存助手回复和调试信息。"""
+    await init_db()
+    async with async_session_maker() as session:
+        session.add(
+            Message(
+                conversation_id=conversation_id,
+                role="assistant",
+                content=content,
+                entities=entities,
+                intents=intents,
+                knowledge=knowledge,
+            )
+        )
+        conv = await session.get(Conversation, conversation_id)
+        if conv is not None:
+            conv.updated_at = datetime.now(timezone.utc)
+        await session.commit()
+
+
+async def get_document_chunk_count() -> int:
+    await init_db()
+    async with async_session_maker() as session:
+        count = await session.scalar(select(func.count()).select_from(DocumentChunk))
+        return int(count or 0)
+
+
+async def index_uploaded_text_file(filename: str, text: str):
+    await init_db()
+    async with async_session_maker() as session:
+        return await index_text_document(session, source_title=filename, text=text)
+
+
+async def index_builtin_corpus(limit: int | None):
+    await init_db()
+    async with async_session_maker() as session:
+        return await index_medical_corpus(session, limit=limit)
+
+
 
 @st.cache_resource
 def load_model(cache_model: str):
-    """加载 NER 推理所需的全部资源（被 streamlit 缓存）。
+    """加载规则版 NER 所需资源（被 streamlit 缓存）。
 
-    返回 ``(glm_tokenizer, glm_model, bert_tokenizer, bert_model, idx2tag, rule, tfidf_r, device)``，
-    其中 ``glm_*`` 已废弃返回 ``None``，仅为保持原签名不破坏调用方。
+    原版加载 BERT+RNN 权重（需 torch/transformers + 百度网盘权重）；现改为
+    「Aho-Corasick 词典匹配 + TF-IDF 对齐」的规则版（见 ``rule_ner.py``），
+    无需任何模型权重，适配低显存环境。
+
+    为不破坏 ``main()`` 的 8 元组解包，仍返回 8 个值，其中已废弃的
+    ``glm_*/bert_*/idx2tag/device`` 统一返回 ``None``，仅 ``rule``、``tfidf_r`` 有效。
     """
-    device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-    # ChatGLM 路径已废弃；保留 None 占位避免下游解包错误
-    glm_model = None
-    glm_tokenizer = None
-    # 加载 Bert 模型
-    with open(os.path.join(settings.TMP_DIR, 'tag2idx.npy'), 'rb') as f:
-        tag2idx = pickle.load(f)
-    idx2tag = list(tag2idx)
-    rule = ner.rule_find()
-    tfidf_r = ner.tfidf_alignment()
-    model_name = settings.NER_MODEL_NAME
-    bert_tokenizer = BertTokenizer.from_pretrained(model_name)
-    bert_model = ner.Bert_Model(model_name, hidden_size=128, tag_num=len(tag2idx), bi=True)
-    bert_model.load_state_dict(torch.load(
-        os.path.join(settings.MODEL_DIR, f'{cache_model}.pt')
-    ))
-    bert_model = bert_model.to(device)
-    bert_model.eval()
-    return glm_tokenizer, glm_model, bert_tokenizer, bert_model, idx2tag, rule, tfidf_r, device
+    rule = rule_ner.rule_find()
+    tfidf_r = rule_ner.tfidf_alignment()
+    return None, None, None, None, None, rule, tfidf_r, None
 
 
 
@@ -132,7 +225,7 @@ def Intent_Recognition(query: str, choice: str) -> str:
 输出的时候请确保输出内容都在**查询类别**中出现过。确保输出类别个数**不要超过5个**！确保你的解释和合乎逻辑的！注意，如果用户询问了有关疾病的问题，一般都要先介绍一下疾病，也就是有"查询疾病简介"这个需求。
 再次检查你的输出都包含在**查询类别**:"查询疾病简介"、"查询疾病病因"、"查询疾病预防措施"、"查询疾病治疗周期"、"查询治愈概率"、"查询疾病易感人群"、"查询疾病所需药品"、"查询疾病宜吃食物"、"查询疾病忌吃食物"、"查询疾病所需检查项目"、"查询疾病所属科目"、"查询疾病的症状"、"查询疾病的治疗方法"、"查询疾病的并发疾病"、"查询药品的生产商"。
 """
-    rec_result = ollama.generate(model=choice, prompt=prompt)['response']
+    rec_result = llm_client.generate(prompt)
     logger.debug('意图识别结果: %s', rec_result)
     return rec_result
 
@@ -168,7 +261,7 @@ def generate_prompt(
 
     :return: ``(prompt, intents_str, entities)``；``intents_str`` 是「、」拼接的中文意图名。
     """
-    entities = ner.get_ner_result(bert_model, bert_tokenizer, query, rule, tfidf_r, device, idx2tag)
+    entities = rule_ner.get_ner_result(query, rule, tfidf_r)
     # 统一封装为 KGClient（若调用方已传入 KGClient 则直接复用）
     kg = client if isinstance(client, KGClient) else KGClient(client)
     yitu: List[str] = []
@@ -232,20 +325,28 @@ def main(is_admin: bool, usname: str) -> None:
         if 'chat_windows' not in st.session_state:
             st.session_state.chat_windows = [[]]
             st.session_state.messages = [[]]
+        if 'pg_conversation_ids' not in st.session_state:
+            st.session_state.pg_conversation_ids = [None]
+        while len(st.session_state.pg_conversation_ids) < len(st.session_state.chat_windows):
+            st.session_state.pg_conversation_ids.append(None)
 
         if st.button('新建对话窗口'):
             st.session_state.chat_windows.append([])
             st.session_state.messages.append([])
+            st.session_state.pg_conversation_ids.append(None)
 
         window_options = [f"对话窗口 {i + 1}" for i in range(len(st.session_state.chat_windows))]
         selected_window = st.selectbox('请选择对话窗口:', window_options)
         active_window_index = int(selected_window.split()[1]) - 1
+        active_pg_conversation_id = st.session_state.pg_conversation_ids[active_window_index]
+        if active_pg_conversation_id is not None:
+            st.caption(f"数据库会话 ID：{active_pg_conversation_id}")
 
         selected_option = st.selectbox(
             label='请选择大语言模型:',
-            options=['Qwen 1.5', 'Llama2-Chinese']
+            options=['DeepSeek']
         )
-        choice = settings.OLLAMA_QWEN_MODEL if selected_option == 'Qwen 1.5' else settings.OLLAMA_LLAMA_MODEL
+        choice = selected_option  # 已统一走 DeepSeek API（见 llm_client.py），此值仅用于 UI 显示
 
         show_ent = show_int = show_prompt = False
         if is_admin:
@@ -255,6 +356,54 @@ def main(is_admin: bool, usname: str) -> None:
             if st.button('修改知识图谱'):
             # 显示一个链接，用户可以点击这个链接在新标签页中打开百度
                 st.markdown('[点击这里修改知识图谱](http://127.0.0.1:7474/)', unsafe_allow_html=True)
+
+            st.divider()
+            st.subheader("RAG 文档入库")
+            try:
+                chunk_count = run_db_task(get_document_chunk_count())
+                st.caption(f"当前已入库切片：{chunk_count}")
+            except Exception as exc:
+                st.caption(f"文档库状态读取失败：{exc}")
+
+            uploaded_file = st.file_uploader(
+                "上传文本语料",
+                type=["txt", "md", "json", "jsonl"],
+                help="支持 UTF-8 文本文件；上传后会递归切片并写入 document_chunks。",
+            )
+            if st.button("上传并入库", disabled=uploaded_file is None):
+                assert uploaded_file is not None
+                try:
+                    text = uploaded_file.getvalue().decode("utf-8")
+                    result = run_db_task(
+                        index_uploaded_text_file(uploaded_file.name, text)
+                    )
+                    st.success(
+                        f"入库完成：新增 {result.created_chunks} 个切片，"
+                        f"跳过 {result.skipped_chunks} 个重复切片。"
+                    )
+                except UnicodeDecodeError:
+                    st.error("仅支持 UTF-8 文本文件。")
+                except Exception as exc:
+                    st.error(f"入库失败：{exc}")
+
+            builtin_limit = st.number_input(
+                "索引内置语料条数",
+                min_value=1,
+                max_value=10000,
+                value=100,
+                step=50,
+                help="先用 100 条快速测试；确认无误后可逐步加大。",
+            )
+            if st.button("索引内置 medical_new_2.json"):
+                try:
+                    result = run_db_task(index_builtin_corpus(int(builtin_limit)))
+                    st.success(
+                        f"内置语料入库完成：读取 {result.records_seen} 条，"
+                        f"新增 {result.created_chunks} 个切片，"
+                        f"跳过 {result.skipped_chunks} 个重复切片。"
+                    )
+                except Exception as exc:
+                    st.error(f"内置语料入库失败：{exc}")
 
 
 
@@ -293,6 +442,15 @@ def main(is_admin: bool, usname: str) -> None:
         with st.chat_message("user"):
             st.markdown(query)
 
+        pg_conversation_id = st.session_state.pg_conversation_ids[active_window_index]
+        try:
+            pg_conversation_id = run_db_task(
+                save_user_message(usname, is_admin, pg_conversation_id, query)
+            )
+            st.session_state.pg_conversation_ids[active_window_index] = pg_conversation_id
+        except Exception as exc:
+            st.warning(f"当前消息未能保存到数据库：{exc}")
+
         response_placeholder = st.empty()
         response_placeholder.text("正在进行意图识别...")
 
@@ -303,8 +461,8 @@ def main(is_admin: bool, usname: str) -> None:
         prompt, yitu, entities = generate_prompt(response, query, client, bert_model, bert_tokenizer, rule, tfidf_r, device, idx2tag)
 
         last = ""
-        for chunk in ollama.chat(model=choice, messages=[{'role': 'user', 'content': prompt}], stream=True):
-            last += chunk['message']['content']
+        for delta in llm_client.chat_stream(prompt):
+            last += delta
             response_placeholder.markdown(last)
         response_placeholder.markdown("")
 
@@ -324,6 +482,20 @@ def main(is_admin: bool, usname: str) -> None:
                 with st.expander("点击显示知识库信息"):
                     st.write(zhishiku_content)
         current_messages.append({"role": "assistant", "content": last, "yitu": yitu, "prompt": zhishiku_content, "ent": str(entities)})
+        pg_conversation_id = st.session_state.pg_conversation_ids[active_window_index]
+        if pg_conversation_id is not None:
+            try:
+                run_db_task(
+                    save_assistant_message(
+                        pg_conversation_id,
+                        last,
+                        entities,
+                        [item for item in yitu.split("、") if item],
+                        zhishiku_content,
+                    )
+                )
+            except Exception as exc:
+                st.warning(f"助手回复未能保存到数据库：{exc}")
 
 
     st.session_state.messages[active_window_index] = current_messages

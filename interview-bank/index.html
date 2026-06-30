@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>医疗 RAG 项目面试题库</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-icon">AI</div>
+        <div>
+          <h1>项目面试题库</h1>
+          <p>医疗 RAG / Agent 应用</p>
+        </div>
+      </div>
+
+      <div class="side-stats">
+        <div>
+          <strong id="total-count">0</strong>
+          <span>题目</span>
+        </div>
+        <div>
+          <strong id="stage-count">0</strong>
+          <span>模块</span>
+        </div>
+        <div>
+          <strong id="deep-count">0</strong>
+          <span>深挖</span>
+        </div>
+      </div>
+
+      <nav id="stage-nav" class="stage-nav" aria-label="模块导航"></nav>
+    </aside>
+
+    <main class="page">
+      <header class="hero">
+        <div>
+          <span class="eyebrow">Standalone Interview Bank</span>
+          <h2>智能导诊与健康问答项目面试题</h2>
+          <p>
+            可直接双击本 HTML 打开，不依赖后端、登录、React 或 Vite。适合面试前复习、随机抽题和按模块查漏补缺。
+          </p>
+        </div>
+        <div class="hero-actions">
+          <button id="random-btn" type="button">随机抽题</button>
+          <button id="reset-btn" type="button" class="secondary">重置筛选</button>
+        </div>
+      </header>
+
+      <section class="metrics" aria-label="题库统计">
+        <div>
+          <span>当前命中</span>
+          <strong id="matched-count">0</strong>
+        </div>
+        <div>
+          <span>标签数量</span>
+          <strong id="tag-count">0</strong>
+        </div>
+        <div>
+          <span>基础 / 中等 / 深挖</span>
+          <strong id="difficulty-counts">0 / 0 / 0</strong>
+        </div>
+      </section>
+
+      <section class="filters">
+        <label class="search-box">
+          <span>搜索</span>
+          <input
+            id="search-input"
+            type="search"
+            placeholder="输入 RAG、LangGraph、HITL、Recall@5、SSE..."
+            autocomplete="off"
+          />
+        </label>
+        <div class="filter-row">
+          <span>模块</span>
+          <div id="stage-filters" class="chip-row"></div>
+        </div>
+        <div class="filter-row">
+          <span>难度</span>
+          <div id="difficulty-filters" class="chip-row"></div>
+        </div>
+        <div class="filter-row">
+          <span>标签</span>
+          <div id="tag-filters" class="chip-row scrollable"></div>
+        </div>
+      </section>
+
+      <section class="flows" aria-label="项目流程图">
+        <article class="flow-card">
+          <h3>项目总架构</h3>
+          <div class="flow">
+            <span>React/静态页面</span><i></i><span>FastAPI</span><i></i><span>LangGraph Agent</span><i></i><span>Hybrid RAG</span><i></i><span>PG / Neo4j / Redis</span><i></i><span>LLM</span>
+          </div>
+        </article>
+        <article class="flow-card">
+          <h3>RAG 检索链路</h3>
+          <div class="flow">
+            <span>Query 改写</span><i></i><span>Multi-Query / HyDE</span><i></i><span>向量 + BM25 + KG</span><i></i><span>Reranker</span><i></i><span>引用溯源</span><i></i><span>流式回答</span>
+          </div>
+        </article>
+        <article class="flow-card">
+          <h3>Agent 状态机</h3>
+          <div class="flow">
+            <span>plan</span><i></i><span>execute_tools</span><i></i><span>review</span><i></i><span>finish</span>
+          </div>
+        </article>
+      </section>
+
+      <section id="question-list" class="question-list" aria-live="polite"></section>
+    </main>
+
+    <script src="./questions.js"></script>
+    <script src="./app.js"></script>
+  </body>
+</html>

@@ -1,0 +1,48 @@
+[project]
+name = "ragqna-medical-assistant"
+version = "0.1.0"
+description = "智能导诊与健康问答助手 —— FastAPI 后端（基于 RAGQnASystem 重构）"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    # --- Web 框架 ---
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "python-multipart>=0.0.9",      # OAuth2PasswordRequestForm 表单解析
+    "streamlit>=1.40",              # 当前保留的调试/管理前端；需兼容 Python 3.13
+    # --- 数据库（PostgreSQL 异步） ---
+    "sqlalchemy[asyncio]>=2.0",
+    "asyncpg>=0.29",
+    # --- 配置与校验 ---
+    "pydantic>=2.7",
+    "pydantic-settings>=2.3",
+    # --- 鉴权 ---
+    "python-jose[cryptography]>=3.3",   # JWT 签发/验签
+    "passlib>=1.7.4",                   # 密码哈希封装
+    "bcrypt>=4.0,<4.1",                 # pin：避免 passlib 1.7.4 读取 bcrypt.__about__ 的兼容告警
+    # --- LLM ---
+    "openai>=1.30",                     # 走 DeepSeek OpenAI 兼容接口（AsyncOpenAI）
+    "langgraph>=1.2",                   # Phase 3 Agent 状态机编排
+    "mcp>=1.9",                         # Model Context Protocol client for pluggable Agent tools
+    # --- 复用基座模块的依赖（kg_client/intent_router/rule_ner） ---
+    "py2neo>=2021.2.4",                 # Neo4j 知识图谱
+    "pyahocorasick>=2.1",               # 规则版 NER 多模匹配
+    "scikit-learn>=1.9",                # TF-IDF 实体对齐；兼容 Python 3.13 / numpy 2
+    "numpy>=2.0",
+    # --- 缓存/限流（阶段五用，先装上占位） ---
+    "redis>=5.0",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.23",
+    "httpx>=0.27",                      # TestClient / AsyncClient
+]
+
+[tool.uv]
+package = false                          # 这是应用而非库，uv 只管理 venv 与依赖，不构建安装本项目
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

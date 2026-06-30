@@ -1,0 +1,44 @@
+# RAGQnASystem 阶段一：数据库基础设施
+# 渐进式部署：本 compose 只起 PostgreSQL(pgvector) + Redis；
+# 现有 Neo4j 容器(ragqna-neo4j) 保持独立不动；阶段一 API 本地 uvicorn 跑。
+# 启动：docker compose up -d
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg14        # PG14 + pgvector（PG15+ 移除 datlastsysoid 列致旧版 Navicat 报错，故降到 14）
+    container_name: ragqna-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: raguser
+      POSTGRES_PASSWORD: ragpass123
+      POSTGRES_DB: ragqna
+      TZ: Asia/Shanghai
+      PGTZ: Asia/Shanghai
+    ports:
+      - "5433:5432"                       # 宿主 5433 → 容器 5432，避开本机可能的 5432
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U raguser -d ragqna"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    container_name: ragqna-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
+  redisdata:

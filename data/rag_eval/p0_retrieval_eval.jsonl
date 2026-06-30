@@ -1,0 +1,12 @@
+{"id":"p0-001","query":"百日咳有什么典型症状，儿童需要注意什么？","expected_sources":["百日咳"],"expected_keywords":["阵发性","咳嗽","儿童"]}
+{"id":"p0-002","query":"高血压一般属于哪个科室，平时怎么预防？","expected_sources":["高血压"],"expected_keywords":["内科","预防"]}
+{"id":"p0-003","query":"糖尿病会有哪些症状，需要做什么检查？","expected_sources":["糖尿病"],"expected_keywords":["血糖","检查"]}
+{"id":"p0-004","query":"流行性感冒如何预防，常见传播方式是什么？","expected_sources":["流行性感冒"],"expected_keywords":["预防","传播"]}
+{"id":"p0-005","query":"支气管炎可能有哪些症状，常见治疗方法是什么？","expected_sources":["支气管炎"],"expected_keywords":["咳嗽","治疗"]}
+{"id":"p0-006","query":"肺炎通常需要做哪些检查？","expected_sources":["肺炎"],"expected_keywords":["胸部","检查"]}
+{"id":"p0-007","query":"胃炎患者饮食上有哪些忌口？","expected_sources":["胃炎"],"expected_keywords":["忌吃","饮食"]}
+{"id":"p0-008","query":"冠心病需要挂什么科，常见检查项目有哪些？","expected_sources":["冠心病"],"expected_keywords":["心内科","检查"]}
+{"id":"p0-009","query":"急性胃肠炎出现呕吐腹泻应该了解哪些治疗信息？","expected_sources":["急性胃肠炎"],"expected_keywords":["呕吐","腹泻","治疗"]}
+{"id":"p0-010","query":"过敏性鼻炎会有哪些典型表现？","expected_sources":["过敏性鼻炎"],"expected_keywords":["鼻塞","喷嚏","症状"]}
+{"id":"p0-011","query":"阿莫西林这个药名相关的资料能不能召回？","expected_keywords":["阿莫西林"]}
+{"id":"p0-012","query":"胸痛并且呼吸困难时是否应该优先考虑急诊？","expected_sources":["Neo4j 知识图谱"],"expected_keywords":["急诊"],"kg_knowledge":["胸痛伴呼吸困难属于高危症状组合，应优先建议急诊或线下医生评估。"]}

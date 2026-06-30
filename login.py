@@ -9,6 +9,9 @@
 
 from __future__ import annotations
 
+import dotenv_min  # 读取 .env（DEEPSEEK_API_KEY / NEO4J_PASSWORD 等），必须在导入 config/webui 前执行
+dotenv_min.load()
+
 import streamlit as st
 
 from user_data_storage import (

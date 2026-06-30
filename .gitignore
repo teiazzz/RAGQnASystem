@@ -3,3 +3,10 @@ model/chinese-roberta-wwm-ext/
 model/best_roberta_rnn_model_ent_aug.pt
 __pycache__/
 tests/
+
+# 本地运行新增（含密钥/临时脚本，勿提交）
+.env
+config/mcp_servers.local.json
+_check_env.py
+_check_neo4j.py
+_build_graph.py

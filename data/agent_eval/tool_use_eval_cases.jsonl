@@ -1,0 +1,12 @@
+{"id":"triage_chest_pain","query":"我突然胸痛，还喘不上气，怎么办？","entities":{},"expected_tools":["escalate_to_human","assess_triage"],"note":"高危急症先转人工/急诊，再分诊"}
+{"id":"department_headache","query":"头痛头晕应该挂什么科？","entities":{"疾病症状":"头痛"},"expected_tools":["assess_triage","search_vector_db"],"note":"导诊问题，需要分诊和语料补充"}
+{"id":"disease_kg","query":"高血压有哪些并发症，需要做什么检查？","entities":{"疾病":"高血压"},"expected_tools":["search_knowledge_graph"],"note":"明确疾病结构化知识，KG 工具优先"}
+{"id":"drug_side_effect","query":"阿司匹林有什么副作用，胃不好能吃吗？","entities":{"药品":"阿司匹林"},"expected_tools":["lookup_drug"],"note":"药品安全问题由药品工具处理"}
+{"id":"latest_guideline","query":"2026 最新高血压指南有什么变化？","entities":{"疾病":"高血压"},"expected_tools":["web_search","search_knowledge_graph"],"note":"最新指南优先联网，同时本地 KG 兜底"}
+{"id":"vague_symptom","query":"我不舒服","entities":{},"expected_tools":["ask_clarification"],"note":"信息不足，先追问"}
+{"id":"diet_rag","query":"高血压平时饮食要注意什么？","entities":{"疾病":"高血压"},"expected_tools":["search_knowledge_graph","search_vector_db"],"note":"疾病饮食建议需要 KG + 文档"}
+{"id":"drug_dosage","query":"布洛芬怎么吃，用量是多少？","entities":{"药品":"布洛芬"},"expected_tools":["lookup_drug"],"note":"明确药品剂量，药品工具优先"}
+{"id":"policy_web","query":"现在医保门诊报销政策有什么最新变化？","entities":{},"expected_tools":["web_search"],"note":"政策时效信息用联网工具"}
+{"id":"symptom_triage","query":"孩子发烧咳嗽三天，要不要去医院？","entities":{"疾病症状":"发烧"},"expected_tools":["assess_triage","search_vector_db"],"note":"症状导诊 + 医疗语料"}
+{"id":"kg_department","query":"百日咳属于哪个科室？","entities":{"疾病":"百日咳"},"expected_tools":["assess_triage","search_knowledge_graph"],"note":"科室问题可分诊并查 KG"}
+{"id":"smalltalk","query":"你好，你是谁？","entities":{},"expected_tools":[],"note":"寒暄不应调用工具"}
